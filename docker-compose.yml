@@ -233,21 +233,29 @@ services:
 
         server:
           http_listen_port: 3100
+          grpc_listen_port: 9096
 
-        ingester:
-          lifecycler:
-            address: 127.0.0.1
-            ring:
-              kvstore:
-                store: inmemory
-              replication_factor: 1
-            final_sleep: 0s
-          chunk_idle_period: 5m
-          chunk_retain_period: 30s
+        common:
+          path_prefix: /loki
+          storage:
+            filesystem:
+              chunks_directory: /loki/chunks
+              rules_directory: /loki/rules
+          replication_factor: 1
+          ring:
+            kvstore:
+              store: inmemory
+
+        query_range:
+          results_cache:
+            cache:
+              embedded_cache:
+                enabled: true
+                max_size_mb: 100
 
         schema_config:
           configs:
-            - from: 2020-05-15
+            - from: 2020-10-24
               store: boltdb-shipper
               object_store: filesystem
               schema: v11
@@ -255,31 +263,19 @@ services:
                 prefix: index_
                 period: 24h
 
-        storage_config:
-          boltdb_shipper:
-            active_index_directory: /loki/boltdb-shipper-active
-            cache_location: /loki/boltdb-shipper-cache
-            cache_ttl: 24h
-            shared_store: filesystem
-          filesystem:
-            directory: /loki/chunks
+        ruler:
+          alertmanager_url: http://localhost:9093
 
         limits_config:
-          enforce_metric_name: false
-          reject_old_samples: true
-          reject_old_samples_max_age: 168h
+          retention_period: 72h
           ingestion_rate_mb: 30
           ingestion_burst_size_mb: 60
 
-        chunk_store_config:
-          max_look_back_period: 168h
-
-        table_manager:
-          retention_deletes_enabled: true
-          retention_period: 72h
+        analytics:
+          reporting_enabled: false
         EOL
         
-        /usr/bin/loki -config.file=/etc/loki/local-config.yaml
+        /usr/bin/loki -config.file=/etc/loki/local-config.yaml -config.expand-env=true
 
   promtail:
     image: grafana/promtail:latest
@@ -340,8 +336,8 @@ services:
               labels:
                 job: push-api
               basic_auth:
-                username: "\${PROMTAIL_API_USERNAME}"
-                password: "\${PROMTAIL_API_PASSWORD}"
+                username: "${PROMTAIL_API_USERNAME}"
+                password: "${PROMTAIL_API_PASSWORD}"
         EOL
         
         /usr/bin/promtail -config.file=/etc/promtail/config.yml -config.expand-env=true
