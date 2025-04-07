@@ -295,12 +295,15 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
+    environment:
+      - PROMTAIL_API_USERNAME=${PROMTAIL_API_USERNAME}
+      - PROMTAIL_API_PASSWORD=${PROMTAIL_API_PASSWORD}
     entrypoint:
-      - /bin/sh
+      - /bin.sh
       - -c
       - |
         mkdir -p /etc/promtail
-        cat > /etc/promtail/config.yml << 'EOL'
+        cat > /etc/promtail/config.yml << EOL
         server:
           http_listen_port: 9080
           grpc_listen_port: 0
@@ -330,7 +333,7 @@ services:
                   job: syslog
                   __path__: /var/log/syslog
                   
-          # HTTP Push API for external clients
+          # HTTP Push API for external clients with basic authentication
           - job_name: push-api
             loki_push_api:
               server:
@@ -338,6 +341,9 @@ services:
                 grpc_listen_port: 0
               labels:
                 job: push-api
+              basic_auth:
+                username: "\${PROMTAIL_API_USERNAME}"
+                password: "\${PROMTAIL_API_PASSWORD}"
         EOL
         
         /usr/bin/promtail -config.file=/etc/promtail/config.yml
