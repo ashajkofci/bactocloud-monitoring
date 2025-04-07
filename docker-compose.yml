@@ -13,7 +13,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - /etc/prometheus:/etc/prometheus
+      - ./prometheus:/etc/prometheus
       - prometheus-data:/prometheus
     restart: unless-stopped
     command:
@@ -26,6 +26,7 @@ services:
       - "3001:3000"
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
     restart: unless-stopped
   
   node_exporter:
