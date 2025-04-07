@@ -13,6 +13,8 @@ services:
     volumes:
       - prometheus-data:/prometheus
     restart: unless-stopped
+    environment:
+      - ADMIN_PASSWORD_HASH=${PROMETHEUS_ADMIN_PASSWORD_HASH}
     entrypoint:
       - /bin/sh
       - -c
@@ -40,9 +42,9 @@ services:
         # Create basic auth file
         mkdir -p /etc/prometheus
         touch /etc/prometheus/web.yml
-        cat > /etc/prometheus/web.yml << 'EOL'
+        cat > /etc/prometheus/web.yml << EOL
         basic_auth_users:
-          admin: $2y$10$zr7pLh1xDCMWVCnL6LsLkO7eo47AN91aMkRxQgPOIcMH9iAGNzTZK
+          admin: "${ADMIN_PASSWORD_HASH}"
         
         tls_server_config:
           cipher_suites:
