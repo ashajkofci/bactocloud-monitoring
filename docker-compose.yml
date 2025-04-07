@@ -3,8 +3,6 @@ version: '3'
 volumes:
   prometheus-data:
   grafana-data:
-  grafana-dashboards:
-    driver: local
 
 services:
   prometheus:
@@ -13,13 +11,32 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - type: bind
-        source: ./prometheus
-        target: /etc/prometheus
       - prometheus-data:/prometheus
     restart: unless-stopped
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /etc/prometheus
+        cat > /etc/prometheus/prometheus.yml << 'EOL'
+        global:
+          scrape_interval: 15s
+          evaluation_interval: 15s
+
+        scrape_configs:
+          - job_name: "prometheus"
+            static_configs:
+              - targets: ["localhost:9090"]
+
+          - job_name: "node_exporter"
+            static_configs:
+              - targets: ["node_exporter:9100"]
+
+          - job_name: "cadvisor"
+            static_configs:
+              - targets: ["cadvisor:8080"]
+        EOL
+        /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
 
   grafana:
     image: grafana/grafana:latest
@@ -28,18 +45,155 @@ services:
       - "3001:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - type: bind
-        source: ./grafana/provisioning
-        target: /etc/grafana/provisioning
-      - type: bind
-        source: ./grafana/dashboards
-        target: /var/lib/grafana/dashboards
     environment:
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/default.json
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
     restart: unless-stopped
-  
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat > /etc/grafana/provisioning/datasources/datasource.yml << 'EOL'
+        apiVersion: 1
+
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            access: proxy
+            url: http://prometheus:9090
+            isDefault: true
+            editable: true
+        EOL
+        
+        mkdir -p /var/lib/grafana/dashboards
+        cat > /var/lib/grafana/dashboards/default.json << 'EOL'
+        {
+          "annotations": {
+            "list": []
+          },
+          "editable": true,
+          "gnetId": null,
+          "graphTooltip": 0,
+          "links": [],
+          "panels": [
+            {
+              "datasource": "Prometheus",
+              "description": "System load average",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "none"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+              },
+              "id": 1,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "single"
+                }
+              },
+              "pluginVersion": "8.0.0",
+              "targets": [
+                {
+                  "exemplar": true,
+                  "expr": "node_load1",
+                  "interval": "",
+                  "legendFormat": "1m",
+                  "refId": "A"
+                },
+                {
+                  "exemplar": true,
+                  "expr": "node_load5",
+                  "interval": "",
+                  "legendFormat": "5m",
+                  "refId": "B"
+                },
+                {
+                  "exemplar": true,
+                  "expr": "node_load15",
+                  "interval": "",
+                  "legendFormat": "15m",
+                  "refId": "C"
+                }
+              ],
+              "title": "System Load Average",
+              "type": "timeseries"
+            }
+          ],
+          "refresh": "5s",
+          "schemaVersion": 30,
+          "style": "dark",
+          "tags": [],
+          "templating": {
+            "list": []
+          },
+          "time": {
+            "from": "now-1h",
+            "to": "now"
+          },
+          "timepicker": {},
+          "timezone": "",
+          "title": "Default Dashboard",
+          "version": 1
+        }
+        EOL
+        
+        cat > /etc/grafana/grafana.ini << 'EOL'
+        [dashboards]
+        default_home_dashboard_path = /var/lib/grafana/dashboards/default.json
+        EOL
+        
+        /run.sh
+
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest
     container_name: node_exporter
@@ -53,8 +207,6 @@ services:
   cadvisor:
     image: google/cadvisor:latest
     container_name: cadvisor
-    # ports:
-    #   - "8080:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
