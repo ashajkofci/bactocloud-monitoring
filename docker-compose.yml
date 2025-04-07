@@ -3,6 +3,7 @@ version: '3'
 volumes:
   prometheus-data:
   grafana-data:
+  loki-data:
 
 services:
   prometheus:
@@ -62,6 +63,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-loki-datasource
     restart: unless-stopped
     entrypoint:
       - /bin/bash
@@ -77,6 +79,12 @@ services:
             access: proxy
             url: http://prometheus:9090
             isDefault: true
+            editable: true
+          
+          - name: Loki
+            type: loki
+            access: proxy
+            url: http://loki:3100
             editable: true
         EOL
         
@@ -207,6 +215,132 @@ services:
         EOL
         
         /run.sh
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /etc/loki
+        cat > /etc/loki/local-config.yaml << 'EOL'
+        auth_enabled: false
+
+        server:
+          http_listen_port: 3100
+
+        ingester:
+          lifecycler:
+            address: 127.0.0.1
+            ring:
+              kvstore:
+                store: inmemory
+              replication_factor: 1
+            final_sleep: 0s
+          chunk_idle_period: 5m
+          chunk_retain_period: 30s
+
+        schema_config:
+          configs:
+            - from: 2020-05-15
+              store: boltdb-shipper
+              object_store: filesystem
+              schema: v11
+              index:
+                prefix: index_
+                period: 24h
+
+        storage_config:
+          boltdb_shipper:
+            active_index_directory: /loki/boltdb-shipper-active
+            cache_location: /loki/boltdb-shipper-cache
+            cache_ttl: 24h
+            shared_store: filesystem
+          filesystem:
+            directory: /loki/chunks
+
+        limits_config:
+          enforce_metric_name: false
+          reject_old_samples: true
+          reject_old_samples_max_age: 168h
+          ingestion_rate_mb: 30
+          ingestion_burst_size_mb: 60
+
+        chunk_store_config:
+          max_look_back_period: 168h
+
+        table_manager:
+          retention_deletes_enabled: true
+          retention_period: 72h
+        EOL
+        
+        /usr/bin/loki -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    ports:
+      - "9080:9080"  # Expose promtail push API port
+    volumes:
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /etc/promtail
+        cat > /etc/promtail/config.yml << 'EOL'
+        server:
+          http_listen_port: 9080
+          grpc_listen_port: 0
+
+        positions:
+          filename: /tmp/positions.yaml
+
+        clients:
+          - url: http://loki:3100/loki/api/v1/push
+
+        scrape_configs:
+          # For logs from local Docker containers
+          - job_name: docker
+            static_configs:
+              - targets:
+                  - localhost
+                labels:
+                  job: docker
+                  __path__: /var/lib/docker/containers/*/*log
+
+          # For logs from local system
+          - job_name: system
+            static_configs:
+              - targets:
+                  - localhost
+                labels:
+                  job: syslog
+                  __path__: /var/log/syslog
+                  
+          # HTTP Push API for external clients
+          - job_name: push-api
+            loki_push_api:
+              server:
+                http_listen_port: 9080
+                grpc_listen_port: 0
+              labels:
+                job: push-api
+        EOL
+        
+        /usr/bin/promtail -config.file=/etc/promtail/config.yml
 
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest
