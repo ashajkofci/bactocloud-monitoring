@@ -301,11 +301,10 @@ services:
         server:
           http_listen_port: 9080
           grpc_listen_port: 0
-          http_server_config:
-            http_listen_port: 9080
-            basic_auth:
-              username: "${PROMTAIL_API_USERNAME}"
-              password: "${PROMTAIL_API_PASSWORD}"
+
+        auth:
+          username: "${PROMTAIL_API_USERNAME}"
+          password: "${PROMTAIL_API_PASSWORD}"
 
         positions:
           filename: /tmp/positions.yaml
