@@ -59,23 +59,21 @@ services:
             X-Content-Type-Options: "nosniff"
             X-Frame-Options: "deny"
             X-XSS-Protection: "1; mode=block"
-          cors_origins: []  # Empty list disables CORS
         
-        # IP-based access control settings
-        tls_client_auth:
-          enabled: false
-          
-        # IP filtering configuration
-        remote_write:
-          address_filter:
-            accept:
-              - "127.0.0.1/8"  # localhost
-              - "10.0.0.0/8"    # private range
-              - "172.16.0.0/12" # private range
-              - "192.168.0.0/16" # private range
-              - "57.128.64.89/32" # example specific external IP
-            reject:
-              - "0.0.0.0/0"    # reject all other IPs
+        # Web-based access control
+        web:
+          page_title: "Prometheus Server"
+          # Restricting access to specified IP addresses
+          access_control:
+            enabled: true
+            allowed_origins:
+              - 127.0.0.1
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 57.128.64.89/32
+            denied_networks:
+              - 0.0.0.0/0
         EOL
         
         /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --web.config.file=/etc/prometheus/web.yml --web.listen-address=0.0.0.0:9090
