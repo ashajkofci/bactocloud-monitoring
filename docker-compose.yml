@@ -3,16 +3,10 @@ version: '3'
 volumes:
   prometheus-data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${PWD}/data/prometheus
   grafana-data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${PWD}/data/grafana
+  grafana-dashboards:
+    driver: local
 
 services:
   prometheus:
@@ -21,7 +15,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus:/etc/prometheus
+      - ./prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
     restart: unless-stopped
     command:
@@ -34,10 +28,12 @@ services:
       - "3001:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-dashboards:/var/lib/grafana/dashboards
     environment:
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/default.json
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     restart: unless-stopped
   
   node_exporter:
