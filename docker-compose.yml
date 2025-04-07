@@ -54,16 +54,6 @@ services:
         
         http_server_config:
           http2: true
-        
-        # IP-based access control
-        # Allowed IPs (examples - replace with your trusted IPs)
-        # Format: CIDR notation
-        http_server_config:
-          http2: true
-        
-        # IP-based access control
-        http_server_config:
-          http2: true
           headers:
             Content-Security-Policy: "default-src 'self'"
             X-Content-Type-Options: "nosniff"
@@ -71,20 +61,18 @@ services:
             X-XSS-Protection: "1; mode=block"
           cors_origins: []  # Empty list disables CORS
         
-        # Add your trusted IP addresses here
-        # For example: ["192.168.1.0/24", "10.0.0.5/32"]
-        # Use /32 for single IP addresses
-        # Use broader CIDR for ranges
-        http_config:
-          forward_headers:
-            - "X-Forwarded-For"
+        # IP-based access control settings
+        tls_client_auth:
+          enabled: false
+          
+        # IP filtering configuration
+        remote_write:
           address_filter:
             accept:
               - "127.0.0.1/8"  # localhost
               - "10.0.0.0/8"    # private range
               - "172.16.0.0/12" # private range
               - "192.168.0.0/16" # private range
-              # Add your specific trusted IPs below
               - "57.128.64.89/32" # example specific external IP
             reject:
               - "0.0.0.0/0"    # reject all other IPs
