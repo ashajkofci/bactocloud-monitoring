@@ -297,7 +297,7 @@ services:
       - PROMTAIL_API_USERNAME=${PROMTAIL_API_USERNAME}
       - PROMTAIL_API_PASSWORD=${PROMTAIL_API_PASSWORD}
     entrypoint:
-      - /bin.sh
+      - /bin/sh
       - -c
       - |
         mkdir -p /etc/promtail
