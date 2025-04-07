@@ -221,6 +221,9 @@ services:
       - "3100:3100"
     volumes:
       - loki-data:/loki
+    environment:
+      - LOKI_API_USERNAME=${PROMTAIL_API_USERNAME}
+      - LOKI_API_PASSWORD=${PROMTAIL_API_PASSWORD}
     command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
     restart: unless-stopped
     entrypoint:
@@ -229,7 +232,7 @@ services:
       - |
         mkdir -p /etc/loki
         cat > /etc/loki/local-config.yaml << 'EOL'
-        auth_enabled: false
+        auth_enabled: true
 
         server:
           http_listen_port: 3100
@@ -258,7 +261,7 @@ services:
             - from: 2020-10-24
               store: boltdb-shipper
               object_store: filesystem
-              schema: v13
+              schema: v11
               index:
                 prefix: index_
                 period: 24h
@@ -270,9 +273,16 @@ services:
           retention_period: 72h
           ingestion_rate_mb: 30
           ingestion_burst_size_mb: 60
+          allow_structured_metadata: false
 
         analytics:
           reporting_enabled: false
+          
+        # Basic authentication configuration
+        api:
+          basic_auth_enabled: true
+          basic_auth_username: "${LOKI_API_USERNAME}"
+          basic_auth_password: "${LOKI_API_PASSWORD}"
         EOL
         
         /usr/bin/loki -config.file=/etc/loki/local-config.yaml -config.expand-env=true -validation.allow-structured-metadata=false
@@ -280,8 +290,6 @@ services:
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
-    ports:
-      - "9080:9080"  # Expose promtail push API port
     volumes:
       - /var/log:/var/log
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
@@ -289,9 +297,6 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
-    environment:
-      - PROMTAIL_API_USERNAME=${PROMTAIL_API_USERNAME}
-      - PROMTAIL_API_PASSWORD=${PROMTAIL_API_PASSWORD}
     entrypoint:
       - /bin/sh
       - -c
@@ -301,10 +306,6 @@ services:
         server:
           http_listen_port: 9080
           grpc_listen_port: 0
-
-        auth:
-          username: "${PROMTAIL_API_USERNAME}"
-          password: "${PROMTAIL_API_PASSWORD}"
 
         positions:
           filename: /tmp/positions.yaml
@@ -330,15 +331,6 @@ services:
                 labels:
                   job: syslog
                   __path__: /var/log/syslog
-                  
-          # HTTP Push API for external clients
-          - job_name: push-api
-            loki_push_api:
-              server:
-                http_listen_port: 9080
-                grpc_listen_port: 0
-              labels:
-                job: push-api
         EOL
         
         /usr/bin/promtail -config.file=/etc/promtail/config.yml -config.expand-env=true
