@@ -36,7 +36,16 @@ services:
             static_configs:
               - targets: ["cadvisor:8080"]
         EOL
-        /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
+        
+        # Create basic auth file
+        mkdir -p /etc/prometheus
+        touch /etc/prometheus/web.yml
+        cat > /etc/prometheus/web.yml << 'EOL'
+        basic_auth_users:
+          admin: $2y$10$zr7pLh1xDCMWVCnL6LsLkO7eo47AN91aMkRxQgPOIcMH9iAGNzTZK
+        EOL
+        
+        /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --web.config.file=/etc/prometheus/web.yml
 
   grafana:
     image: grafana/grafana:latest
