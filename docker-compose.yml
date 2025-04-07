@@ -3,8 +3,16 @@ version: '3'
 volumes:
   prometheus-data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/data/prometheus
   grafana-data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/data/grafana
 
 services:
   prometheus:
@@ -27,6 +35,9 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/default.json
     restart: unless-stopped
   
   node_exporter:
