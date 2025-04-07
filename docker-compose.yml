@@ -258,7 +258,7 @@ services:
             - from: 2020-10-24
               store: boltdb-shipper
               object_store: filesystem
-              schema: v11
+              schema: v13
               index:
                 prefix: index_
                 period: 24h
@@ -275,7 +275,7 @@ services:
           reporting_enabled: false
         EOL
         
-        /usr/bin/loki -config.file=/etc/loki/local-config.yaml -config.expand-env=true
+        /usr/bin/loki -config.file=/etc/loki/local-config.yaml -config.expand-env=true -validation.allow-structured-metadata=false
 
   promtail:
     image: grafana/promtail:latest
@@ -301,6 +301,11 @@ services:
         server:
           http_listen_port: 9080
           grpc_listen_port: 0
+          http_server_config:
+            http_listen_port: 9080
+            basic_auth:
+              username: "${PROMTAIL_API_USERNAME}"
+              password: "${PROMTAIL_API_PASSWORD}"
 
         positions:
           filename: /tmp/positions.yaml
@@ -327,7 +332,7 @@ services:
                   job: syslog
                   __path__: /var/log/syslog
                   
-          # HTTP Push API for external clients with basic authentication
+          # HTTP Push API for external clients
           - job_name: push-api
             loki_push_api:
               server:
@@ -335,9 +340,6 @@ services:
                 grpc_listen_port: 0
               labels:
                 job: push-api
-              basic_auth:
-                username: "${PROMTAIL_API_USERNAME}"
-                password: "${PROMTAIL_API_PASSWORD}"
         EOL
         
         /usr/bin/promtail -config.file=/etc/promtail/config.yml -config.expand-env=true
