@@ -1,7 +1,13 @@
+version: '3'
+
 volumes:
   prometheus-data:
   grafana-data:
   loki-data:
+
+networks:
+  monitoring:
+    driver: bridge
 
 services:
   prometheus:
@@ -50,6 +56,8 @@ services:
         EOL
         
         /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --web.listen-address=0.0.0.0:9090
+    networks:
+      - monitoring
 
   grafana:
     image: grafana/grafana:latest
@@ -213,6 +221,8 @@ services:
         EOL
         
         /run.sh
+    networks:
+      - monitoring
 
   loki:
     image: grafana/loki:latest
@@ -221,9 +231,6 @@ services:
       - "3100:3100"
     volumes:
       - loki-data:/loki
-    environment:
-      - LOKI_API_USERNAME=${PROMTAIL_API_USERNAME}
-      - LOKI_API_PASSWORD=${PROMTAIL_API_PASSWORD}
     command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
     restart: unless-stopped
     entrypoint:
@@ -232,11 +239,14 @@ services:
       - |
         mkdir -p /etc/loki
         cat > /etc/loki/local-config.yaml << 'EOL'
-        auth_enabled: true
+        auth_enabled: false
 
         server:
           http_listen_port: 3100
           grpc_listen_port: 9096
+          http_server_read_timeout: 1m
+          http_server_write_timeout: 1m
+          log_level: info
 
         common:
           path_prefix: /loki
@@ -277,15 +287,11 @@ services:
 
         analytics:
           reporting_enabled: false
-          
-        # Basic authentication configuration
-        api:
-          basic_auth_enabled: true
-          basic_auth_username: "${LOKI_API_USERNAME}"
-          basic_auth_password: "${LOKI_API_PASSWORD}"
         EOL
         
         /usr/bin/loki -config.file=/etc/loki/local-config.yaml -config.expand-env=true -validation.allow-structured-metadata=false
+    networks:
+      - monitoring
 
   promtail:
     image: grafana/promtail:latest
@@ -334,6 +340,10 @@ services:
         EOL
         
         /usr/bin/promtail -config.file=/etc/promtail/config.yml -config.expand-env=true
+    networks:
+      - monitoring
+    ports:
+      - "9080:9080"
 
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest
@@ -344,6 +354,8 @@ services:
     restart: unless-stopped
     volumes:
       - '/:/host:ro,rslave'
+    networks:
+      - monitoring
 
   cadvisor:
     image: google/cadvisor:latest
@@ -357,3 +369,5 @@ services:
     devices:
       - /dev/kmsg
     restart: unless-stopped
+    networks:
+      - monitoring
