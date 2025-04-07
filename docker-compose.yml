@@ -20,7 +20,7 @@ services:
       - -c
       - |
         mkdir -p /etc/prometheus
-        cat > /etc/prometheus/prometheus.yml << 'EOL'
+        cat > /etc/prometheus/prometheus.yml << EOL
         global:
           scrape_interval: 15s
           evaluation_interval: 15s
@@ -37,6 +37,14 @@ services:
           - job_name: "cadvisor"
             static_configs:
               - targets: ["cadvisor:8080"]
+              
+          - job_name: "bactocloud"
+            basic_auth:
+              username: "${BACTOCLOUD_USERNAME}"
+              password: "${BACTOCLOUD_PASSWORD}"
+            static_configs:
+              - targets: ["${BACTOCLOUD_HOST}:${BACTOCLOUD_PORT}"]
+            metrics_path: "/metrics"
         EOL
         
         # Create basic auth file
