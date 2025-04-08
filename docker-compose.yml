@@ -357,7 +357,7 @@ services:
         loki.source.api.logs "http_log_source" -> loki.write.receiver "loki_write"
         EOL
         
-        /usr/bin/alloy run -config.file=/etc/alloy/config.river
+        /usr/bin/alloy run /etc/alloy/config.river
     networks:
       - monitoring
     ports:
