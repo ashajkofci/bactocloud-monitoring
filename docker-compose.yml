@@ -369,7 +369,7 @@ services:
             into: loki_write
         EOL
         
-        /usr/bin/alloy
+        /usr/bin/alloy run
     networks:
       - monitoring
     ports:
