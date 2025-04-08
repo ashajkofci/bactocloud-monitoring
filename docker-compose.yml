@@ -297,16 +297,19 @@ services:
     volumes:
       - /var/log:/var/log
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    command: run --config.file=/etc/alloy/config.yaml
+    restart: unless-stopped
     depends_on:
       - loki
-    restart: unless-stopped
+    command:
+      - /usr/bin/alloy
+      - run
+      - --config.file=/etc/alloy/config.yaml
     entrypoint:
       - /bin/sh
       - -c
       - |
         mkdir -p /etc/alloy
-        cat > /etc/alloy/config.yaml << EOL
+        cat > /etc/alloy/config.yaml << 'EOL'
         components:
           # File discovery for Docker container logs
           - name: discovery_docker
@@ -370,14 +373,7 @@ services:
             into: loki_write
         EOL
         
-        # Find the alloy binary and run it with the correct path
-        ALLOY_BIN=$(find / -name "alloy" -type f -executable 2>/dev/null | head -1)
-        if [ -z "$ALLOY_BIN" ]; then
-          echo "Error: Could not find alloy binary in the container"
-          exit 1
-        fi
-        echo "Found alloy binary at: $ALLOY_BIN"
-        $ALLOY_BIN run --config.file=/etc/alloy/config.yaml
+        /usr/bin/alloy run --config.file=/etc/alloy/config.yaml
     networks:
       - monitoring
     ports:
