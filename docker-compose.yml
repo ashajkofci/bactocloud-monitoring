@@ -300,10 +300,6 @@ services:
     restart: unless-stopped
     depends_on:
       - loki
-    command:
-      - /usr/bin/alloy
-      - run
-      - --config.file=/etc/alloy/config.yaml
     entrypoint:
       - /bin/sh
       - -c
@@ -373,7 +369,7 @@ services:
             into: loki_write
         EOL
         
-        /usr/bin/alloy run --config.file=/etc/alloy/config.yaml
+        /usr/bin/alloy
     networks:
       - monitoring
     ports:
