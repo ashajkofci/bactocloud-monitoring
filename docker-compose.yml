@@ -85,6 +85,12 @@ services:
             url: http://prometheus:9090
             isDefault: true
             editable: true
+            
+          - name: Loki
+            type: loki
+            access: proxy
+            url: http://loki:3100
+            editable: true
         EOL
         
         mkdir -p /var/lib/grafana/dashboards
@@ -285,13 +291,13 @@ services:
     networks:
       - monitoring
 
-  promtail:
-    image: grafana/promtail:latest
-    container_name: promtail
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
     volumes:
       - /var/log:/var/log
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    command: -config.file=/etc/promtail/config.yml -config.expand-env=true
+    command: run --config.file=/etc/alloy/config.yaml
     depends_on:
       - loki
     restart: unless-stopped
@@ -299,39 +305,72 @@ services:
       - /bin/sh
       - -c
       - |
-        mkdir -p /etc/promtail
-        cat > /etc/promtail/config.yml << EOL
-        server:
-          http_listen_port: 9080
-          grpc_listen_port: 0
+        mkdir -p /etc/alloy
+        cat > /etc/alloy/config.yaml << EOL
+        components:
+          # File discovery for Docker container logs
+          - name: discovery_docker
+            kind: discovery.docker
+            targets_only: true
 
-        positions:
-          filename: /tmp/positions.yaml
+          # File discovery for syslog
+          - name: discovery_syslog
+            kind: discovery.file
+            paths: 
+              - /var/log/syslog
 
-        clients:
-          - url: http://loki:3100/loki/api/v1/push
+          # Log file reading 
+          - name: log_file_reading
+            kind: loki.source.file
+            targets:
+              - __path__: '/var/lib/docker/containers/*/*log'
+                job: docker
+                __host__: \${HOSTNAME}
+              - __path__: '/var/log/syslog'
+                job: syslog
+                __host__: \${HOSTNAME}
+            max_log_size: 10MB
+            poll_interval: 10s
+            positions_directory: /tmp/alloy-positions
 
-        scrape_configs:
-          # For logs from local Docker containers
-          - job_name: docker
-            static_configs:
-              - targets:
-                  - localhost
-                labels:
-                  job: docker
-                  __path__: /var/lib/docker/containers/*/*log
+          # Loki client for sending logs
+          - name: loki_write
+            kind: loki.write
+            endpoint: 
+              url: http://loki:3100/loki/api/v1/push
+              tenant_id: default
+            
+          # HTTP server for logs push API
+          - name: http_server
+            kind: http.server
+            port: 9080
+            parameters:
+              - name: custom_labels
+                type: object
+                default: {}
+                description: "Custom labels to add to logs"
+                
+          # HTTP log endpoint for external applications
+          - name: http_log_source
+            kind: loki.source.api
+            server:
+              http_server:
+                base_path: /loki/api/v1/push
 
-          # For logs from local system
-          - job_name: system
-            static_configs:
-              - targets:
-                  - localhost
-                labels:
-                  job: syslog
-                  __path__: /var/log/syslog
+        flow:
+          # Flow for file-based logs
+          - from: [discovery_docker, discovery_syslog]
+            into: log_file_reading
+            
+          - from: [log_file_reading]
+            into: loki_write
+            
+          # Flow for HTTP-based logs
+          - from: [http_log_source]
+            into: loki_write
         EOL
         
-        /usr/bin/promtail -config.file=/etc/promtail/config.yml -config.expand-env=true
+        /bin/grafana-alloy run --config.file=/etc/alloy/config.yaml
     networks:
       - monitoring
     ports:
