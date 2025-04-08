@@ -305,71 +305,59 @@ services:
       - -c
       - |
         mkdir -p /etc/alloy
-        cat > /etc/alloy/config.yaml << 'EOL'
-        components:
-          # File discovery for Docker container logs
-          - name: discovery_docker
-            kind: discovery.docker
-            targets_only: true
+        cat > /etc/alloy/config.river << 'EOL'
+        discovery.docker "discovery_docker" {
+          targets_only = true
+        }
 
-          # File discovery for syslog
-          - name: discovery_syslog
-            kind: discovery.file
-            paths: 
-              - /var/log/syslog
+        discovery.file "discovery_syslog" {
+          paths = ["/var/log/syslog"]
+        }
 
-          # Log file reading 
-          - name: log_file_reading
-            kind: loki.source.file
-            targets:
-              - __path__: '/var/lib/docker/containers/*/*log'
-                job: docker
-                __host__: \${HOSTNAME}
-              - __path__: '/var/log/syslog'
-                job: syslog
-                __host__: \${HOSTNAME}
-            max_log_size: 10MB
-            poll_interval: 10s
-            positions_directory: /tmp/alloy-positions
+        loki.source.file "log_file_reading" {
+          targets = [
+            {__path__ = "/var/lib/docker/containers/*/*log", job = "docker", __host__ = env("HOSTNAME")},
+            {__path__ = "/var/log/syslog", job = "syslog", __host__ = env("HOSTNAME")},
+          ]
+          max_log_size = "10MB"
+          poll_interval = "10s"
+          positions_directory = "/tmp/alloy-positions"
+        }
 
-          # Loki client for sending logs
-          - name: loki_write
-            kind: loki.write
-            endpoint: 
-              url: http://loki:3100/loki/api/v1/push
-              tenant_id: default
-            
-          # HTTP server for logs push API
-          - name: http_server
-            kind: http.server
-            port: 9080
-            parameters:
-              - name: custom_labels
-                type: object
-                default: {}
-                description: "Custom labels to add to logs"
-                
-          # HTTP log endpoint for external applications
-          - name: http_log_source
-            kind: loki.source.api
-            server:
-              http_server:
-                base_path: /loki/api/v1/push
+        loki.write "loki_write" {
+          endpoint {
+            url = "http://loki:3100/loki/api/v1/push"
+            tenant_id = "default"
+          }
+        }
 
-        flow:
-          # Flow for file-based logs
-          - from: [discovery_docker, discovery_syslog]
-            into: log_file_reading
-            
-          - from: [log_file_reading]
-            into: loki_write
-            
-          # Flow for HTTP-based logs
-          - from: [http_log_source]
-            into: loki_write
+        http.server "http_server" {
+          port = 9080
+          parameters {
+            custom_labels = {
+              type = "object"
+              default = {}
+              description = "Custom labels to add to logs"
+            }
+          }
+        }
+
+        loki.source.api "http_log_source" {
+          server {
+            http_server {
+              base_path = "/loki/api/v1/push"
+            }
+          }
+        }
+
+        // Flow definitions
+        discovery.docker.targets "discovery_docker" -> loki.source.file.targets "log_file_reading"
+        discovery.file.targets "discovery_syslog" -> loki.source.file.targets "log_file_reading"
+        loki.source.file.logs "log_file_reading" -> loki.write.receiver "loki_write"
+        loki.source.api.logs "http_log_source" -> loki.write.receiver "loki_write"
         EOL
         
-        /usr/bin/alloy run /etc/alloy/config.yaml
+        /usr/bin/alloy run -config.file=/etc/alloy/config.river
     networks:
       - monitoring
     ports:
